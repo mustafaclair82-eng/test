@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PSP Emulator - Single File</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0d1117;
+      color: #c9d1d9;
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    header {
+      width: 100%;
+      padding: 12px 24px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .btn {
+      background: #238636;
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    input[type="file"] { display: none; }
+    #canvas-container {
+      margin-top: 20px;
+      width: 960px;
+      height: 544px;
+      max-width: 95vw;
+      max-height: calc(95vw * 0.566);
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    canvas { width: 100%; height: 100%; display: block; }
+    #status { margin: 12px; font-size: 0.9rem; color: #8b949e; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h3>PSP Single-File Emulator</h3>
+    <label class="btn" for="iso-input">Load ISO / CSO</label>
+    <input type="file" id="iso-input" accept=".iso,.cso,.pbp" />
+  </header>
+
+  <div id="status">Decoding embedded WASM engine...</div>
+
+  <div id="canvas-container">
+    <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+  </div>
+
+  <script>
+    // 1. Embedded WebAssembly Core (Base64 Encoded)
+    // To make this 100% self-contained, convert ppsspp.wasm to a base64 string
+    const embeddedWasmBase64 = "AGFzbQEAAAAB..."; // Replace with full base64 string
+
+    // Convert Base64 back to ArrayBuffer for WebAssembly instantiation
+    function base64ToArrayBuffer(base64) {
+      const binaryString = window.atob(base64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes.buffer;
+    }
+
+    // 2. Emscripten Core Configuration
+    var Module = {
+      canvas: document.getElementById('canvas'),
+      instantiateWasm: function(imports, successCallback) {
+        const wasmBytes = base64ToArrayBuffer(embeddedWasmBase64);
+        WebAssembly.instantiate(wasmBytes, imports).then(function(output) {
+          successCallback(output.instance);
+        });
+        return {};
+      },
+      onRuntimeInitialized: function() {
+        document.getElementById('status').innerText = "Engine ready! Load a PSP ISO to start.";
+      }
+    };
+
+    // 3. Load ISO File into Virtual Filesystem
+    document.getElementById('iso-input').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function() {
+        const data = new Uint8Array(reader.result);
+        Module.FS.writeFile('/game.iso', data);
+        document.getElementById('status').innerText = `Running: ${file.name}`;
+        if (Module._loadGame) Module._loadGame('/game.iso');
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+
+  <!-- Embedded JS Runtime (Copy contents of ppsspp.js directly inside this tag) -->
+  <script>
+    /* Paste contents of ppsspp.js here */
+  </script>
+</body>
+</html>
